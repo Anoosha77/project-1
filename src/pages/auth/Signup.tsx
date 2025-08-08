@@ -54,7 +54,7 @@ const Signup = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Create your account</CardTitle>
+          <CardTitle className="text-2xl">Sign Up </CardTitle>
         </CardHeader>
 
         <CardContent className="space-y-4">
