@@ -1,5 +1,3 @@
-"use client";
-
 import {
   AreaChart,
   Area,
@@ -14,7 +12,7 @@ import {
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,32 +22,22 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { getGraphData } from "@/@core/api/api";
 
-// Static month list
 const months = [
-  "January", "Feburary", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
 ];
 
 const currentYear = new Date().getFullYear();
 const currentMonthIndex = new Date().getMonth();
 const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-// Dummy data
-const allChartData = years.flatMap((year) =>
-  months.map((month, idx) => ({
-    year,
-    month,
-    monthIndex: idx,
-    expense: Math.floor(Math.random() * 300 + 100),
-    products: Math.floor(Math.random() * 200 + 50),
-    disabled: year === currentYear && idx > currentMonthIndex,
-  }))
-);
-
 export default function ChartArea() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState("All");
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const monthOptions = [
     { name: "All", disabled: false },
@@ -59,8 +47,54 @@ export default function ChartArea() {
     })),
   ];
 
-  const filteredData = allChartData.filter((item) => {
-    if (item.year !== selectedYear) return false;
+// inside useEffect
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const response = await getGraphData(selectedYear);
+
+      // API raw data
+      const rawData = Array.isArray(response.data) ? response.data : [];
+
+      // remove summary row
+      const cleaned = rawData.filter((item: any) => item.month);
+
+      // create baseline for all months (0 values)
+      const baseline = months.map((month, idx) => ({
+        month,
+        products: 0,
+        expenses: 0,
+        monthIndex: idx,
+        year: selectedYear,
+      }));
+
+      // merge API values into baseline
+      const merged = baseline.map((base) => {
+        const found = cleaned.find((d: any) => d.month === base.month);
+        return found
+          ? {
+              ...base,
+              products: Number(found.products) || 0,
+              expenses: Number(found.expenses) || 0,
+            }
+          : base;
+      });
+
+      setChartData(merged);
+    } catch (err) {
+      console.error("Error fetching graph data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, [selectedYear]);
+
+
+  // filter data by month
+  const filteredData = chartData.filter((item) => {
     if (selectedMonth === "All") {
       return selectedYear === currentYear
         ? item.monthIndex <= currentMonthIndex
@@ -69,7 +103,7 @@ export default function ChartArea() {
     return item.month === selectedMonth;
   });
 
-  //  Custom rotated tick renderer for month names
+  // rotated labels
   const renderRotatedTick = ({ x, y, payload }: any) => (
     <text
       x={x}
@@ -77,30 +111,32 @@ export default function ChartArea() {
       textAnchor="end"
       transform={`rotate(-35, ${x}, ${y})`}
       fontSize="12"
-      fill="#4B5563"
+      fill="#9CA3AF"
     >
       {payload.value}
     </text>
   );
 
   return (
-    <Card>
+    <Card className="bg-[#1E1E1E] border border-gray-800 shadow rounded-xl text-white">
       <CardHeader>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <CardTitle>Expense vs Products Overview</CardTitle>
+          <CardTitle className="text-[#00E5FF]">
+            Expense vs Products Overview
+          </CardTitle>
 
           <div className="flex gap-4">
             {/* Year Filter */}
             <div className="flex flex-col w-[160px]">
-              <Label className="text-xs text-muted-foreground mb-1">Year</Label>
+              <Label className="text-xs text-gray-400 mb-1">Year</Label>
               <Select
                 value={selectedYear.toString()}
                 onValueChange={(val) => setSelectedYear(parseInt(val))}
               >
-                <SelectTrigger className="h-9 text-sm w-full">
+                <SelectTrigger className="h-9 text-sm w-full bg-[#2A2A2A] border-none text-white focus:ring-[#00E5FF]">
                   <SelectValue placeholder="Year" />
                 </SelectTrigger>
-                <SelectContent className="w-full">
+                <SelectContent className="w-full bg-[#1E1E1E] text-white">
                   {years.map((year) => (
                     <SelectItem key={year} value={year.toString()}>
                       {year}
@@ -112,15 +148,15 @@ export default function ChartArea() {
 
             {/* Month Filter */}
             <div className="flex flex-col w-[160px]">
-              <Label className="text-xs text-muted-foreground mb-1">Month</Label>
+              <Label className="text-xs text-gray-400 mb-1">Month</Label>
               <Select
                 value={selectedMonth}
                 onValueChange={(val) => setSelectedMonth(val)}
               >
-                <SelectTrigger className="h-9 text-sm w-full">
+                <SelectTrigger className="h-9 text-sm w-full bg-[#2A2A2A] border-none text-white focus:ring-[#00E5FF]">
                   <SelectValue placeholder="Month" />
                 </SelectTrigger>
-                <SelectContent className="max-h-48 overflow-y-auto w-full">
+                <SelectContent className="max-h-48 overflow-y-auto w-full bg-[#1E1E1E] text-white">
                   {monthOptions.map(({ name, disabled }) => (
                     <SelectItem
                       key={name}
@@ -139,41 +175,55 @@ export default function ChartArea() {
       </CardHeader>
 
       <CardContent className="h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={filteredData} margin={{ top: 10, right: 30, bottom: 20, left: 30 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey="month"
-              height={60}
-              interval={0}
-              tick={renderRotatedTick} // ✅ Apply custom rotated labels
-            />
-            <Tooltip />
-            <defs>
-              <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="colorProducts" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <Area
-              type="monotone"
-              dataKey="expense"
-              stroke="#ef4444"
-              fill="url(#colorExpense)"
-            />
-            <Area
-              type="monotone"
-              dataKey="products"
-              stroke="#3b82f6"
-              fill="url(#colorProducts)"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </CardContent>
+  {loading ? (
+    <div className="flex justify-center items-center h-full">Loading...</div>
+  ) : (
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart
+        data={filteredData}
+        margin={{ top: 10, right: 30, bottom: 20, left: 30 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
+        <XAxis
+          dataKey="month"
+          height={60}
+          interval={0}
+          tick={renderRotatedTick}
+        />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: "#1E1E1E",
+            border: "1px solid #00E5FF",
+            color: "#fff",
+          }}
+        />
+        <defs>
+          <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
+            <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+          </linearGradient>
+          <linearGradient id="colorProducts" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#00E5FF" stopOpacity={0.8} />
+            <stop offset="95%" stopColor="#00E5FF" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <Area
+          type="monotone"
+          dataKey="expenses"
+          stroke="#ef4444"
+          fill="url(#colorExpense)"
+        />
+        <Area
+          type="monotone"
+          dataKey="products"
+          stroke="#00E5FF"
+          fill="url(#colorProducts)"
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  )}
+</CardContent>
+
     </Card>
   );
 }

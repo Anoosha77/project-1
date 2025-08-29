@@ -5,11 +5,14 @@ type Column<T> = {
 };
 
 type CustomTableProps<T> = {
-  columns: Column<T>[];
-  data: T[];
+  columns?: Column<T>[];
+  data?: T[];
 };
 
-export default function CustomTable<T>({ columns, data }: CustomTableProps<T>) {
+export default function CustomTable<T>({
+  columns = [],
+  data = [],
+}: CustomTableProps<T>) {
   return (
     <div className="overflow-x-auto border rounded-md shadow mt-4">
       <table className="min-w-full text-sm text-left">
@@ -34,7 +37,7 @@ export default function CustomTable<T>({ columns, data }: CustomTableProps<T>) {
               <tr key={index} className="border-t">
                 {columns.map((col) => (
                   <td key={col.key} className="px-4 py-2">
-                    {col.render ? col.render(row, index) : (row as any)[col.key]}
+                    {col.render ? col.render(row, index) : (row as any)[col.key] ?? "-"}
                   </td>
                 ))}
               </tr>
