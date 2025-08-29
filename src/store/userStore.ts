@@ -1,4 +1,3 @@
-// src/store/userStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -16,6 +15,7 @@ type UserState = {
   accessToken: string | null;
   isAuthenticated: boolean;
   setUser: (user: User, token: string) => void;
+  clearTempAuth: () => void;
   logout: () => void;
 };
 
@@ -29,8 +29,12 @@ export const useUserStore = create<UserState>()(
         set({
           user,
           accessToken: token,
-          isAuthenticated: true,
+          isAuthenticated: user.verified,
         });
+      },
+      clearTempAuth: () => {
+        localStorage.removeItem("otp_email");
+        localStorage.removeItem("temp_token");
       },
       logout: () => {
         set({
@@ -38,11 +42,11 @@ export const useUserStore = create<UserState>()(
           accessToken: null,
           isAuthenticated: false,
         });
-        localStorage.removeItem("user-storage");
+        localStorage.removeItem("user-storage"); // Zustand persist
+        localStorage.removeItem("otp_email");
+        localStorage.removeItem("temp_token");
       },
     }),
-    {
-      name: "user-storage", // localStorage key name
-    }
+    { name: "user-storage" }
   )
 );

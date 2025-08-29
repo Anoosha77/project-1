@@ -1,40 +1,35 @@
 import { useRef, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVerifyOtp, useResendOtp } from "@/hooks/useAuth";
+import { useUserStore } from "@/store/userStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import axios from "axios";
+import { toast } from "sonner";
 
 const VerifyOtp = () => {
   const [otp, setOtp] = useState(Array(6).fill(""));
-  const [timeLeft, setTimeLeft] = useState(180); // 3 min countdown
+  const [timeLeft, setTimeLeft] = useState(180);
   const [resendEnabled, setResendEnabled] = useState(false);
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const navigate = useNavigate();
   const storedEmail = localStorage.getItem("otp_email");
 
+  const setUser = useUserStore((state) => state.setUser);
   const { mutate: verifyOtpMutate, isPending } = useVerifyOtp();
-  const { mutate: resendOtpMutate } = useResendOtp();
+  const { mutate: resendOtpMutate, isPending: resendPending } = useResendOtp();
 
-  // Countdown logic
   useEffect(() => {
     if (timeLeft <= 0) {
       setResendEnabled(true);
       return;
     }
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
-
+    const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  // Input Handling
   const handleChange = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return;
-
+    if (!/^\d?$/.test(value)) return; 
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
@@ -59,47 +54,46 @@ const VerifyOtp = () => {
     }
   };
 
-  // OTP Submit
   const handleSubmit = () => {
     const fullOtp = otp.join("");
-    if (!storedEmail) return alert("No email found.");
+    if (fullOtp.length < 6) return toast.error("Please enter the full 6-digit OTP");
+    if (!storedEmail) return toast.error("No email found for verification");
+
     verifyOtpMutate(
       { email: storedEmail, otp: fullOtp },
       {
-        onSuccess: () => {
-          alert("✅ OTP Verified");
+        onSuccess: (data) => {
+          toast.success("✅ OTP Verified");
+
+          const { accessToken, user } = data.data || {};
+          if (accessToken && user) {
+            localStorage.setItem("token", accessToken);
+            setUser(user, accessToken);
+          }
+
           localStorage.removeItem("otp_email");
-          navigate("/dashboard");
+          navigate("/dashboard", { replace: true });
         },
         onError: (err: any) => {
-          alert(err?.response?.data?.message || "❌ Invalid OTP");
+          toast.error(err?.response?.data?.message || "❌ Invalid OTP");
         },
       }
     );
   };
 
-  // Resend with JWT Refresh
-  const handleResend = async () => {
-    if (!storedEmail) return alert("No email found for resend.");
+  const handleResend = () => {
+    if (!storedEmail) return toast.error("No email found for resend");
 
-    try {
-      // Refresh JWT token before resend
-      await axios.get("/api/v1/auth/refresh", { withCredentials: true });
-
-      resendOtpMutate(storedEmail, {
-        onSuccess: () => {
-          alert("📨 OTP resent!");
-          setTimeLeft(180); // Reset countdown
-          setResendEnabled(false);
-        },
-        onError: (err: any) => {
-          alert(err?.response?.data?.message || "⚠️ Failed to resend OTP");
-        },
-      });
-    } catch (error: any) {
-      alert("⚠️ Session expired. Please login again.");
-      navigate("/login");
-    }
+    resendOtpMutate(storedEmail, {
+      onSuccess: () => {
+        toast.success("📨 OTP resent!");
+        setTimeLeft(180);
+        setResendEnabled(false);
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || "⚠️ Failed to resend OTP");
+      },
+    });
   };
 
   const formatTime = (seconds: number) => {
@@ -109,44 +103,48 @@ const VerifyOtp = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-sm w-full p-6 border rounded-lg shadow bg-white">
+    <div className="min-h-screen flex items-center justify-center bg-[#121212] px-4">
+      <div className="max-w-sm w-full p-6 border rounded-2xl shadow-lg bg-[#1E1E1E] text-white">
         <h1 className="text-2xl font-semibold text-center mb-2">Verify OTP</h1>
-        <p className="text-sm text-center text-muted-foreground mb-4">
+        <p className="text-sm text-center text-gray-400 mb-4">
           Enter the 6-digit code sent to <b>{storedEmail}</b>
         </p>
 
         <div className="flex justify-between gap-2 mb-6">
-          {otp.map((digit, index) => (
-            <Input
-              key={index}
-              ref={(el) => {
-                inputRefs.current[index] = el;
-              }}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={digit}
-              onChange={(e) => handleChange(index, e.target.value)}
-              onKeyDown={(e) => handleKeyDown(e, index)}
-              className="w-10 h-12 text-center text-lg"
-            />
-          ))}
+{otp.map((digit, index) => (
+  <Input
+    key={index}
+    ref={(el) => {
+      inputRefs.current[index] = el;
+    }}
+    type="text"
+    inputMode="numeric"
+    maxLength={1}
+    value={digit}
+    onChange={(e) => handleChange(index, e.target.value)}
+    onKeyDown={(e) => handleKeyDown(e, index)}
+    className="w-10 h-12 text-center text-lg bg-[#2A2A2A] text-white border-none focus:ring-2 focus:ring-[#00E5FF]"
+  />
+))}
         </div>
 
-        <Button onClick={handleSubmit} className="w-full" disabled={isPending}>
+        <Button onClick={handleSubmit} className="w-full bg-[#00E5FF] hover:bg-cyan-400 text-black font-semibold rounded-lg transition-all duration-200" disabled={isPending}>
           {isPending ? "Verifying..." : "Verify"}
         </Button>
 
-        <p className="mt-4 text-sm text-center text-muted-foreground">
+        <p className="mt-4 text-sm text-center text-gray-400">
           {resendEnabled ? (
             <>
               Didn’t receive the code?{" "}
               <span
                 onClick={handleResend}
-                className="text-blue-600 underline cursor-pointer"
+                className={`${
+                  resendPending
+                    ? "opacity-50 cursor-not-allowed"
+                    : "text-[#00E5FF] underline cursor-pointer"
+                }`}
               >
-                Resend
+                {resendPending ? "Sending..." : "Resend"}
               </span>
             </>
           ) : (
